@@ -19,6 +19,11 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+// Include MG filter functions
+if (!include dirname(__FILE__).'/mg-filter.php') {
+    Mailgun::deactivate_and_die(dirname(__FILE__).'/mg-filter.php');
+}
+
 /**
  * mg_api_last_error is a compound getter/setter for the last error that was
  * encountered during a Mailgun API call.
@@ -43,29 +48,47 @@ function mg_api_last_error($error = null)
     }
 }
 
-/**
- * Tries several methods to get the MIME Content-Type of a file.
+/*
+ * Wordpress filter to mutate a `To` header to use recipient variables.
+ * Uses the `mg_use_recipient_vars_syntax` filter to apply the actual
+ * change. Otherwise, just a list of `To` addresses will be returned.
  *
- * @param string $filepath
- * @param string $default_type If all methods fail, fallback to $default_type
+ * @param string|array $to_addrs Array or comma-separated list of email addresses to mutate.
  *
- * @return string Content-Type
+ * @return array Array containing list of `To` addresses and recipient vars array
  *
- * @since 1.5.4
+ * @since 1.5.7
  */
-function get_mime_content_type($filepath, $default_type = 'text/plain')
+add_filter('mg_mutate_to_rcpt_vars', 'mg_mutate_to_rcpt_vars_cb');
+function mg_mutate_to_rcpt_vars_cb($to_addrs)
 {
-    if (function_exists('mime_content_type')) {
-        return mime_content_type($filepath);
-    } elseif (function_exists('finfo_file')) {
-        $fi = finfo_open(FILEINFO_MIME_TYPE);
-        $ret = finfo_file($fi, $filepath);
-        finfo_close($fi);
-
-        return $ret;
-    } else {
-        return $default_type;
+    if (is_string($to_addrs)) {
+        $to_addrs = explode(',', $to_addrs);
     }
+
+    if (has_filter('mg_use_recipient_vars_syntax')) {
+        $use_rcpt_vars = apply_filters('mg_use_recipient_vars_syntax', null);
+        if ($use_rcpt_vars) {
+            $vars = array();
+
+            $idx = 0;
+            foreach ($to_addrs as $addr) {
+                $rcpt_vars[$addr] = array('batch_msg_id' => $idx);
+                $idx++;
+            }
+
+            // TODO: Also add folding to prevent hitting the 998 char limit on headers.
+            return array(
+                'to'        => '%recipient%',
+                'rcpt_vars' => json_encode($rcpt_vars),
+            );
+        }
+    }
+
+    return array(
+        'to'        => $to_addrs,
+        'rcpt_vars' => null,
+    );
 }
 
 /**
@@ -180,64 +203,16 @@ function wp_mail($to, $subject, $message, $headers = '', $attachments = array())
         }
     }
 
-    if ($mailgun['override-from'] && !empty($mailgun['from-name'])
-        && !empty($mailgun['from-address'])
-    ) {
-        $from_name = $mailgun['from-name'];
-        $from_email = $mailgun['from-address'];
-    } else {
-        // From email and name
-        // If we don't have a name from the input headers
-        if (empty($from_name) && !empty($mailgun['from-name'])) {
-            $from_name = $mailgun['from-name'];
-        } elseif (empty($from_email) && empty($mailgun['from-name'])) {
-            if (function_exists('get_current_site')) {
-                $from_name = get_current_site()->site_name;
-            } else {
-                $from_name = 'WordPress';
-            }
-        }
-
-        /* If we don't have `From` input headers, use wordpress@$sitedomain
-         * Some hosts will block outgoing mail from this address if it doesn't
-         * exist but there's no easy alternative. Defaulting to admin_email
-         * might appear to be another option but some hosts may refuse to
-         * relay mail from an unknown domain.
-         *
-         * @link http://trac.wordpress.org/ticket/5007.
-         */
-
-        if (empty($from_email) && !empty($mailgun['from-address'])) {
-            $from_email = $mailgun['from-address'];
-        } elseif (empty($from_email) && empty($mailgun['from-address'])) {
-            if (function_exists('get_current_site')) {
-                $sitedomain = get_current_site()->domain;
-            } else {
-                // Get the site domain and get rid of www.
-                $sitedomain = strtolower($_SERVER['SERVER_NAME']);
-                if (substr($sitedomain, 0, 4) == 'www.') {
-                    $sitedomain = substr($sitedomain, 4);
-                }
-            }
-
-            $from_email = 'wordpress@'.$sitedomain;
-        }
-
-        // Attempt to apply external filters to these values before using our own.
-        if (has_filter('wp_mail_from')) {
-            $from_email = apply_filters(
-                'wp_mail_from',
-                $from_email
-            );
-        }
-
-        if (has_filter('wp_mail_from_name')) {
-            $from_name = apply_filters(
-                'wp_mail_from_name',
-                $from_name
-            );
-        }
+    if (!isset($from_name)) {
+        $from_name = null;
     }
+
+    if (!isset($from_email)) {
+        $from_email = null;
+    }
+
+    $from_name = mg_detect_from_name($from_name);
+    $from_email = mg_detect_from_address($from_email);
 
     $body = array(
         'from'    => "{$from_name} <{$from_email}>",
@@ -246,7 +221,12 @@ function wp_mail($to, $subject, $message, $headers = '', $attachments = array())
         'text'    => $message,
     );
 
-    $body['o:tag'] = '';
+    $rcpt_data = apply_filters('mg_mutate_to_rcpt_vars', $to);
+    if (!is_null($rcpt_data['rcpt_vars'])) {
+        $body['recipient-variables'] = $rcpt_data['rcpt_vars'];
+    }
+
+    $body['o:tag'] = array();
     $body['o:tracking-clicks'] = !empty($mailgun['track-clicks']) ? $mailgun['track-clicks'] : 'no';
     $body['o:tracking-opens'] = empty($mailgun['track-opens']) ? 'no' : 'yes';
 
@@ -257,7 +237,7 @@ function wp_mail($to, $subject, $message, $headers = '', $attachments = array())
     }
 
     // campaign-id now refers to a list of tags which will be appended to the site tag
-    if (isset($mailgun['campaign-id'])) {
+    if (!empty($mailgun['campaign-id'])) {
         $tags = explode(',', str_replace(' ', '', $mailgun['campaign-id']));
         if (empty($body['o:tag'])) {
             $body['o:tag'] = $tags;
@@ -292,6 +272,14 @@ function wp_mail($to, $subject, $message, $headers = '', $attachments = array())
 
         // Remove the tmpfile
         unlink($tmppath);
+    }
+
+    // Allow external content type filter to function normally
+    if (has_filter('wp_mail_content_type')) {
+        $content_type = apply_filters(
+            'wp_mail_content_type',
+            $content_type
+        );
     }
 
     if ('text/plain' === $content_type) {
@@ -337,6 +325,9 @@ function wp_mail($to, $subject, $message, $headers = '', $attachments = array())
 
     $payload = null;
 
+    // Allow other plugins to apply body changes before writing the payload.
+    $body = apply_filters('mg_mutate_message_body', $body);
+
     // Iterate through pre-built params and build payload:
     foreach ($body as $key => $value) {
         if (is_array($value)) {
@@ -356,6 +347,9 @@ function wp_mail($to, $subject, $message, $headers = '', $attachments = array())
             $payload .= "\r\n";
         }
     }
+
+    // Allow other plugins to apply attachent changes before writing to the payload.
+    $attachments = apply_filters('mg_mutate_attachments', $attachments);
 
     // If we have attachments, add them to the payload.
     if (!empty($attachments)) {

@@ -4,8 +4,8 @@ Mailgun for WordPress
 Contributors: Mailgun, sivel, lookahead.io, m35dev
 Tags: mailgun, smtp, http, api, mail, email
 Requires at least: 3.3
-Tested up to: 4.7
-Stable tag: 1.5.5
+Tested up to: 4.8
+Stable tag: 1.5.8.4
 License: GPLv2 or later
 
 
@@ -42,18 +42,76 @@ Your web server may not allow outbound HTTP connections. Set `Use HTTP API` to "
 
 Your web server may not allow outbound SMTP connections on port 465 for secure connections or 587 for unsecured connections. Try changing `Use Secure SMTP` to "No" or "Yes" depending on your current configuration and testing again. If both fail, try setting `Use HTTP API` to "Yes" and testing again.
 
+If you *have* to use SMTP and something is still going horribly wrong, enable debug mode in WordPress and also add the `MG_DEBUG_SMTP` constant to your `wp-config.php`, like so:
+
+`
+define( 'MG_DEBUG_SMTP', true );
+`
+
 - Can this be configured globally for WordPress Multisite?
 
 Yes, using the following constants that can be placed in wp-config.php:
 
 `
-MAILGUN_USEAPI   Type: boolean
-MAILGUN_APIKEY   Type: string
-MAILGUN_DOMAIN   Type: string
-MAILGUN_USERNAME Type: string
-MAILGUN_PASSWORD Type: string
-MAILGUN_SECURE   Type: boolean
+MAILGUN_USEAPI       Type: boolean
+MAILGUN_APIKEY       Type: string
+MAILGUN_DOMAIN       Type: string
+MAILGUN_USERNAME     Type: string
+MAILGUN_PASSWORD     Type: string
+MAILGUN_SECURE       Type: boolean
+MAILGUN_FROM_NAME    Type: string
+MAILGUN_FROM_ADDRESS Type: string
 `
+
+- What hooks are available for use with other plugins?
+
+`mg_use_recipient_vars_syntax`
+  Mutates messages to use recipient variables syntax - see
+  https://documentation.mailgun.com/user_manual.html#batch-sending for more info.
+
+  Should accept a list of `To` addressses.
+
+  Should *only* return `true` or `false`.
+
+`mg_mutate_message_body`
+  Allows an external plugin to mutate the message body before sending.
+
+  Should accept an array, `$body`.
+
+  Should return a new array to replace `$body`.
+
+`mg_mutate_attachments`
+  Allows an external plugin to mutate the attachments on the message before
+  sending.
+
+  Should accept an array, `$attachments`.
+
+  Should return a new array to replace `$attachments`.
+
+- What hooks are available for use with other plugins?
+
+`mg_use_recipient_vars_syntax`
+  Mutates messages to use recipient variables syntax - see
+  https://documentation.mailgun.com/user_manual.html#batch-sending for more info.
+
+  Should accept a list of `To` addressses.
+
+  Should *only* return `true` or `false`.
+
+`mg_mutate_message_body`
+  Allows an external plugin to mutate the message body before sending.
+
+  Should accept an array, `$body`.
+
+  Should return a new array to replace `$body`.
+
+`mg_mutate_attachments`
+  Allows an external plugin to mutate the attachments on the message before
+  sending.
+
+  Should accept an array, `$attachments`.
+
+  Should return a new array to replace `$attachments`.
 
 
 == Screenshots ==
@@ -67,6 +125,51 @@ MAILGUN_SECURE   Type: boolean
 
 
 == Changelog ==
+
+= 1.5.8.4 (2017-06-28): =
+- Packaging fix which takes care of an odd filtering issue (https://wordpress.org/support/topic/1-5-8-3-broke-the-mg_mutate_message_body-filter)
+
+= 1.5.8.3 (2017-06-13): =
+- Fix a bug causing only the last header value to be used when multiple headers of the same type are specified (https://wordpress.org/support/topic/bug-with-mg_parse_headers/)
+- Added `pt_BR` translations (thanks @emersonbroga)
+
+= 1.5.8.2 (2017-02-27): =
+- Fix a bug causing empty tags to be sent with messages (#51)
+- Add `mg_mutate_message_body` hook to allow other plugins to modify the message body before send
+- Add `mg_mutate_attachments` hook to allow other plugins to modify the message attachments before send
+- Fix a bug causing the AJAX test to fail incorrectly.
+
+= 1.5.8.2 (2017-02-27): =
+- Fix a bug causing empty tags to be sent with messages (#51)
+- Add `mg_mutate_message_body` hook to allow other plugins to modify the message body before send
+- Add `mg_mutate_attachments` hook to allow other plugins to modify the message attachments before send
+- Fix a bug causing the AJAX test to fail incorrectly.
+
+= 1.5.8.1 (2017-02-06): =
+- Fix "Undefined property: MailgunAdmin::$hook_suffix" (#48)
+- Fix "Undefined variable: from_name on every email process" (API and SMTP) (#49)
+- Admin code now loads only on admin user access
+
+= 1.5.8 (2017-01-23): =
+* Rewrite a large chunk of old SMTP code
+* Fix a bug with SMTP + "override from" that was introduced in 1.5.7
+* SMTP debug logging is now controlled by `MG_DEBUG_SMTP` constant
+
+= 1.5.7.1 (2017-01-18): =
+* Fix an odd `Undefined property: MailgunAdmin::$defaults` when saving config
+* Fix strict mode notice for using `$mailgun['override-from']` without checking `isset`
+
+= 1.5.7 (2017-01-04): =
+* Add better support for using recipient variables for batch mailing.
+* Clarify wording on `From Address` note
+* Detect from name and address for `phpmailer_init` / SMTP now will honour Mailgun "From Name / From Addr" settings
+* SMTP configuration test will now provide the error message, if the send fails
+* Fix `undefined variable: content_type` error in `wp-mail.php` (https://wordpress.org/support/topic/minor-bug-on-version-version-1-5-6/#post-8634762)
+* Fix `undefined index: override-from` error in `wp-mail.php` (https://wordpress.org/support/topic/php-notice-undefined-index-override-from/)
+
+= 1.5.6 (2016-12-30): =
+* Fix a very subtle bug causing fatal errors with older PHP versions < 5.5
+* Respect `wp_mail_content_type` (#37 - @FPCSJames)
 
 = 1.5.5 (2016-12-27): =
 * Restructure the `admin_notices` code

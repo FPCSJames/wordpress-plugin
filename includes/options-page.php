@@ -22,7 +22,7 @@
 ?>
         <div class="wrap">
             <div id="icon-options-general" class="icon32"><br /></div>
-            <span class="alignright"><a target="_blank" href="http://www.mailgun.com/"><img src="https://www.mailgun.com/static/img/mailgun.svg" alt="Mailgun" style="width: 10em;"/></a></span>
+            <span class="alignright"><a target="_blank" href="http://www.mailgun.com/"><img src="https://assets.mailgun.com/img/mailgun.svg" alt="Mailgun" style="width: 10em;"/></a></span>
             <h2><?php _e('Mailgun', 'mailgun'); ?></h2>
             <p>A <a target="_blank" href="http://www.mailgun.com/">Mailgun</a> account is required to use this plugin and the Mailgun service.</p>
             <p>If you need to register for an account, you can do so at <a target="_blank" href="http://www.mailgun.com/">http://www.mailgun.com/</a>.</p>
@@ -121,7 +121,7 @@
                         </th>
                         <td>
                             <input type="text" class="regular-text" name="mailgun[from-address]" value="<?php esc_attr_e($this->get_option('from-address')); ?>" placeholder="wordpress@mydomain.com" />
-                            <p class="description"><?php _e('The <address@mydomain.com> part of the sender information (<code>"Excited User &lt;user@samples.mailgun.org&gt;"</code>). This address will appear as the `From` address on sent mail. It is recommended that the @mydomain portion matches your WordPress domain.', 'mailgun'); ?></p>
+                            <p class="description"><?php _e('The <address@mydomain.com> part of the sender information (<code>"Excited User &lt;user@samples.mailgun.org&gt;"</code>). This address will appear as the `From` address on sent mail. <strong>It is recommended that the @mydomain portion matches your Mailgun sending domain.</strong>', 'mailgun'); ?></p>
                         </td>
                     </tr>
                     <tr valign="top">
